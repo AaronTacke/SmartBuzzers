@@ -41,7 +41,9 @@ uint8_t chosenTimer = 0;
 
 
 // Do setup if necessary
-void setup() {}
+void setup() {
+  Serial.begin(9600);
+}
 
 
 // Start Gamemode
@@ -75,11 +77,11 @@ bool delay_until(int millis_time, uint8_t player){
   return false;
 }
 
-void choose(uint8_t player){
+void choose(long millis_time, uint8_t player){
   // Wait until every button is released
   while(pressed() != 0);
   // Calculate end time in internal milliseconds
-  long endTime = millis() + timer[chosenTimer-1];
+  long endTime = millis() + millis_time;
   long timeLeft = endTime - millis();
 
   // While time is left (pressing buzzer changes endTime)
@@ -109,7 +111,7 @@ void gamemode_first(){
   while(true){
     uint8_t first = pressed();
     while(first == 0) first = pressed();
-    choose(first);
+    choose(timer[chosenTimer-1], first);
   }
 }
 
@@ -128,7 +130,58 @@ void gamemode_last(){
 
 // Gamemode: Players pass a hot potato until it explodes
 void gamemode_potato(){
-  // TODO
+  // Wait until every button is released
+  while(pressed() != 0); 
+  // At the beginning only player 4 is logged in
+  uint8_t players[max_players];
+  for(int i = 0; i < sizeof(players); i++) players[i] = 0;
+  players[0] = 4;
+  uint8_t playerCount = 1;
+
+  // Add new players until Player 4 continues
+  uint8_t newPlayer = pressed();
+  while(newPlayer!=4){
+    bool exist = (newPlayer==0);
+    // Check if player exists
+    for(int i = 0; i < sizeof(players); i++) if(players[i] == newPlayer) exist = true;
+
+    // Add new player
+    if(!exist){
+      playerCount++;
+      int i = 0;
+      while(players[i] != 0) i++;
+      players[i] = newPlayer;
+    }
+
+    // Show Players
+    setLight(players[(millis()/100)%playerCount]);
+
+    newPlayer = pressed();
+  }
+
+  setLight(0);
+
+  activePlayerIndex = random(0,playerCount);
+  
+  endTime = millis() + random(5000, 15000);
+  long timeLeft = endTime - millis();
+
+  //TODO just copied yet:
+  // While time is left (pressing buzzer changes endTime)
+  while(timeLeft > 0){
+    // Blinking speed depending on time left
+    int light_time = min(sqrt(timeLeft)*5,666);
+    setLight(players[activePlayerIndex]);
+    // Change end time to now if player presses button
+    if(delay_until(light_time,player)) endTime = millis();
+    setLight(0);
+    // Change end time to now if player presses button
+    if(delay_until(light_time/2,player)) endTime = millis();
+    // Calculate remaining time left
+    timeLeft = endTime - millis();
+  }
+  
+  
 }
 
 
