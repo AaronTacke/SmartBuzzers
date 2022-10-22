@@ -36,10 +36,59 @@ uint8_t pressed(){
 }
 
 
-// Choose Gamemode and count/order players if necessary
-void setup() {
+// Do setup if necessary
+void setup() {}
+
+
+// Start Gamemode
+void loop() {
+  switch(pressed()){
+    case 1:
+      gamemode_first();
+      break;
+    case 2:
+      gamemode_order();
+      break;
+    case 3:
+      gamemode_last();
+      break;
+    case 4:
+      gamemode_potato();
+      break;
+    case 5:
+      gamemode_random();
+      break;
+    default:
+      break;
+  }
+}
+
+
+// Gamemode: The first player to press the button is chosen
+void gamemode_first(){
   // TODO
 }
 
-// Replaced by specific loop functions for different Gamemodes
-void loop() {}
+
+// Gamemode: The players are chosen in the order in which they pressed
+void gamemode_order(){
+  // TODO
+}
+
+
+// Gamemode: The last player to press the button is chosen
+void gamemode_last(){
+  // TODO
+}
+
+
+// Gamemode: Players pass a hot potato until it explodes
+void gamemode_potato(){
+  // TODO
+}
+
+
+// Gamemode: A random player is chosen
+void gamemode_random(){
+  // TODO
+}
