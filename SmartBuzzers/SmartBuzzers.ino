@@ -1,24 +1,29 @@
-
-#define max_players 8
-#define analog_threshold 500
+#define MAX_PLAYERS 8
+#define ANALOG_THRESHOLD 500
 
 
 // Pins for buttons of buzzers in correct order
 const uint8_t buttons[] = {A2, A1, A6, A4, A7, A5, A3, A0};
 
-
 // Pins for lights of buzzers in correct order
 const uint8_t lights[] = {11, 6, 3, 2, 4, 7, 8, 5};
 
+// Settings for different gamemodes
+const long timer[] = {86400000, 1000, 3000, 5000, 10000, 20000, 30000, 60000};
+uint8_t chosenTimer = 0;
+uint8_t playerCount = 0;
 
-// Sets lights from 1 to 8, 0 means no light
+
+/* 
+ * Sets lights from 1 to 8, 0 means no light
+ */
 void setLight(uint8_t light){
   static uint8_t oldLight;
   
-  // Turn off previous buzzer
+  // Turn off previous light
   if(oldLight > 0) pinMode(lights[oldLight-1], INPUT);
   
-  // Turn on chosen buzzer
+  // Turn on chosen light
   if(light > 0){
     oldLight = light;
     pinMode(lights[oldLight-1], OUTPUT);
@@ -27,165 +32,339 @@ void setLight(uint8_t light){
 }
 
 
-// Returns number of pressed buzzer, 0 if none is pressed
+/*
+ * Blink players light until timeout or press
+ */
+void select_player(long millis_time, uint8_t player){
+  if(player == 0) return;
+  
+  // Calculate end time in milliseconds
+  long endTime = millis() + millis_time;
+
+  // While time is left
+  long timeLeft = endTime - millis();
+  while(timeLeft > 0){
+    // Blinking speed depending on time left
+    int light_time = min(sqrt(timeLeft)*5,666);
+
+    // Blink while waiting for pressed button
+    setLight(player);
+    if(pressed_timeout(light_time,player)) endTime = millis();
+    setLight(0);
+    if(pressed_timeout(light_time/2,player)) endTime = millis();
+
+    timeLeft = endTime - millis();
+  }
+}
+
+
+/*
+ * Animate specified button and then select player (wait for press)
+ */
+void player_lost(uint8_t player){
+  if(player == 0) return;
+  const uint8_t LONG_TIMER_INDEX = 0;
+
+  // Wait a second for suspense
+  setLight(0);
+  delay(1000);
+
+  // Blink 2 seconds
+  for(uint8_t i = 0; i < 5; i++){
+    setLight(player);
+    delay(200);
+    setLight(0);
+    delay(200);
+  }
+  
+  // Wait for player to continue by pressing buzzer
+  select_player(timer[LONG_TIMER_INDEX], player);
+}
+
+
+/* 
+ * Returns number of pressed buzzer, 0 if none is pressed 
+ */
 uint8_t pressed(){
-  for(int i = 1; i <= max_players; i++){
-    if(analogRead(buttons[i-1])>analog_threshold) return i;
+  static long buttonsDebounceTime[] = {0,0,0,0,0,0,0,0};
+  static bool buttonState[] = {false, false, false, false, false, false, false, false};
+  static const long debounceTime = 30;
+
+  long currentTime = millis();
+  uint8_t pressed = 0;
+
+  // Reset unpressed buttons after debounce time
+  for(uint8_t i = 1; i <= MAX_PLAYERS; i++){
+    if(currentTime - buttonsDebounceTime[i-1] > debounceTime
+        && analogRead(buttons[i-1]) < ANALOG_THRESHOLD && buttonState[i-1]){
+      buttonState[i-1] = false;
+      buttonsDebounceTime[i-1] = currentTime;
+    }
+  }
+
+  // Choose pressed button after debounce time
+  for(uint8_t i = 1; i <= MAX_PLAYERS; i++){
+    if(currentTime - buttonsDebounceTime[i-1] > debounceTime
+        && analogRead(buttons[i-1]) > ANALOG_THRESHOLD && !buttonState[i-1]){
+      buttonState[i-1] = true;
+      buttonsDebounceTime[i-1] = currentTime;
+      return i;
+    }
   }
   return 0;
 }
 
 
-const long timer[] = {86400000, 1000, 3000, 5000, 10000, 20000, 30000, 60000};
-uint8_t chosenTimer = 0;
-
-
-// Do setup if necessary
-void setup() {
-  Serial.begin(9600);
-}
-
-
-// Start Gamemode
-void loop() {
-  switch(pressed()){
-    case 1:
-      gamemode_first();
-      break;
-    case 2:
-      gamemode_order();
-      break;
-    case 3:
-      gamemode_last();
-      break;
-    case 4:
-      gamemode_potato();
-      break;
-    case 5:
-      gamemode_random();
-      break;
-    default:
-      break;
-  }
-}
-
-bool delay_until(int millis_time, uint8_t player){
-  long endTime = millis() + millis_time;
-  while(millis()<endTime){
-    if(pressed() == player) return true;
-  }
+/* 
+ * Checks whether specified player presses button until timeout 
+ */
+bool pressed_timeout(long millis_timeout, uint8_t player){
+  long endTime = millis() + millis_timeout;
+  while(millis()<endTime) if(pressed() == player) return true;
   return false;
 }
 
-void choose(long millis_time, uint8_t player){
-  // Wait until every button is released
-  while(pressed() != 0);
-  // Calculate end time in internal milliseconds
-  long endTime = millis() + millis_time;
-  long timeLeft = endTime - millis();
 
-  // While time is left (pressing buzzer changes endTime)
-  while(timeLeft > 0){
-    // Blinking speed depending on time left
-    int light_time = min(sqrt(timeLeft)*5,666);
-    setLight(player);
-    // Change end time to now if player presses button
-    if(delay_until(light_time,player)) endTime = millis();
-    setLight(0);
-    // Change end time to now if player presses button
-    if(delay_until(light_time/2,player)) endTime = millis();
-    // Calculate remaining time left
-    timeLeft = endTime - millis();
+/* 
+ * Do setup if necessary
+ */
+void setup() {}
+
+
+/*
+ * Start Gamemode
+ */
+void loop() {
+  switch(pressed()){
+    case 1: gamemode_first();
+    case 2: gamemode_order();
+    case 3: gamemode_last();
+    case 4: gamemode_potato();
+    case 5: gamemode_random_potato();
+    case 6: gamemode_follow();
+    case 7: gamemode_random();
+    case 8: gamemode_states();
   }
-  // Wait until every button is released
-  while(pressed() != 0);
 }
 
 
-// Gamemode: The first player to press the button is chosen
+/* 
+ * 1st Gamemode: The first player to press the button is chosen
+ */
 void gamemode_first(){
-  // Wait until every button is released
-  while(pressed() != 0); 
   // Choose time to answer
   while(chosenTimer == 0) chosenTimer = pressed();
+
+  // Always select player that presses the button
+  while(true) select_player(timer[chosenTimer-1], pressed());
+}
+
+
+/* 
+ * 2nd Gamemode: The players are chosen in the order in which they pressed
+ */
+void gamemode_order(){
+  // Queue stores order of button presses
+  uint8_t order[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+
   while(true){
-    uint8_t first = pressed();
-    while(first == 0) first = pressed();
-    choose(timer[chosenTimer-1], first);
+    // Activate light for current head
+    setLight(order[0]);
+    uint8_t button = pressed();
+    
+    // Remove head if pressed
+    if(button == order[0]) for(uint8_t i = 0; i < 8; i++) order[i] = order[i+1];
+
+    // Append press to queue (if not contained yet)
+    else for(uint8_t i = 0; i < 8; i++){
+      if(order[i] == 0) order[i] = button;
+      if(order[i] == button) i = 8;
+    }
   }
 }
 
 
-// Gamemode: The players are chosen in the order in which they pressed
-void gamemode_order(){
-  // TODO
-}
-
-
-// Gamemode: The last player to press the button is chosen
+/* 
+ * 3rd Gamemode: The last player to press the button is chosen
+ */
 void gamemode_last(){
-  // TODO
+  // Choose number of players
+  while(playerCount == 0) playerCount = pressed();
+
+  while(true){
+    bool alreadyPressed[] = {false, false, false, false, false, false, false, false};
+    uint8_t counter = 0;
+
+    // Until only one player is left
+    while(counter < playerCount - 1){
+      
+      // Subtly blink for already pressed players
+      uint8_t lightIndex = millis() / 100 % MAX_PLAYERS;
+      setLight(alreadyPressed[lightIndex] * (lightIndex + 1));
+
+      // Check if new player pressed the button
+      uint8_t button = pressed();
+      if(button > 0 && !alreadyPressed[button-1]){
+        alreadyPressed[button-1] = true;
+        counter++;
+      }
+    }
+    
+    // Last player loses
+    for(uint8_t i = 0; i < playerCount; i++){
+      if(!alreadyPressed[i]) player_lost(i + 1);
+    }
+  }
 }
 
 
-// Gamemode: Players pass a hot potato until it explodes
+/*
+ * 4th Gamemode: Players pass hot potato until it explodes
+ */
 void gamemode_potato(){
-  // Wait until every button is released
-  while(pressed() != 0); 
-  // At the beginning only player 4 is logged in
-  uint8_t players[max_players];
-  for(int i = 0; i < sizeof(players); i++) players[i] = 0;
-  players[0] = 4;
-  uint8_t playerCount = 1;
+  // Choose number of players
+  while(playerCount == 0) playerCount = pressed();
 
-  // Add new players until Player 4 continues
-  uint8_t newPlayer = pressed();
-  while(newPlayer!=4){
-    bool exist = (newPlayer==0);
-    // Check if player exists
-    for(int i = 0; i < sizeof(players); i++) if(players[i] == newPlayer) exist = true;
+  while(true){
+    // Play with random starter for random amount of time
+    int player = random(0, playerCount);
+    long endTime = millis() + random(5000,15000);
+    while(millis() < endTime){
 
-    // Add new player
-    if(!exist){
-      playerCount++;
-      int i = 0;
-      while(players[i] != 0) i++;
-      players[i] = newPlayer;
+      // Activate light for active player
+      setLight((player % playerCount) + 1);
+
+      // If player presses the button, the it's the next players turn
+      uint8_t button = pressed();
+      if(button == ((player % playerCount) + 1)) player++;
+      else if(button > 0) {
+        // If wrong player presses button, he loses directly
+        player = button - 1;
+        endTime = millis();
+      }
+      delay(1);
+    }
+    
+    // If the time is up, the active player loses
+    player_lost((player % playerCount) + 1);
+  }
+}
+
+
+/*
+ * 5th Gamemode: Players pass hot potato until it explodes
+ */
+void gamemode_random_potato(){
+  // Choose number of players
+  while(playerCount == 0) playerCount = pressed();
+
+  while(true){
+    // Play with random starter for random amount of time
+    int player = random(0, playerCount);
+    long endTime = millis() + random(5000,15000);
+    while(millis() < endTime){
+      
+      // Activate light for active player
+      setLight((player % playerCount) + 1);
+      
+      // If player presses the button, another random player is selected
+      uint8_t button = pressed();
+      if(button == ((player % playerCount) + 1)) 
+        while(button == ((player % playerCount) + 1)) 
+          player = random(0, playerCount);
+      else if(button > 0) {
+        // If wrong player presses button, he loses directly
+        player = button - 1;
+        endTime = millis();
+      }
+      delay(1);
+    }
+    
+    // If the time is up, the active player loses
+    player_lost((player % playerCount) + 1);
+  }
+}
+
+
+/*
+ * 6th Gamemode: 2 potatos follow each other until reached
+ */
+void gamemode_follow(){
+  // Choose number of players - at least 4
+  while(playerCount < 4) playerCount = pressed();
+
+  while(true){
+    // 2 random start positions at least 1 apart
+    int player1 = random(0, playerCount);
+    int player2 = player1 + random(2, playerCount - 2);
+
+    // Until both point to the same buzzer (one catches up)
+    while(player1 % playerCount != player2 % playerCount){
+
+      // Blink both active buzzers
+      bool playerLight = millis() / 50 % 2 == 0;
+      setLight(playerLight * ((player1 % playerCount) + 1) 
+        + (!playerLight) * ((player2 % playerCount) + 1));
+
+      // If active player presses the button, it's the next players turn
+      uint8_t button = pressed();
+      if(button == ((player1 % playerCount) + 1)) player1++;
+      else if(button == ((player2 % playerCount) + 1)) player2++;
+      else if(button > 0) {
+        // If wrong player presses button, he loses directly
+        player1 = button - 1;
+        player2 = button - 1;
+      }
+      delay(1);
     }
 
-    // Show Players
-    setLight(players[(millis()/100)%playerCount]);
-
-    newPlayer = pressed();
+    // If another player catches up, one loses
+    player_lost((player1 % playerCount) + 1);
   }
-
-  setLight(0);
-
-  activePlayerIndex = random(0,playerCount);
-  
-  endTime = millis() + random(5000, 15000);
-  long timeLeft = endTime - millis();
-
-  //TODO just copied yet:
-  // While time is left (pressing buzzer changes endTime)
-  while(timeLeft > 0){
-    // Blinking speed depending on time left
-    int light_time = min(sqrt(timeLeft)*5,666);
-    setLight(players[activePlayerIndex]);
-    // Change end time to now if player presses button
-    if(delay_until(light_time,player)) endTime = millis();
-    setLight(0);
-    // Change end time to now if player presses button
-    if(delay_until(light_time/2,player)) endTime = millis();
-    // Calculate remaining time left
-    timeLeft = endTime - millis();
-  }
-  
-  
 }
 
 
-// Gamemode: A random player is chosen
+/*
+ * 7th Gamemode: A random player is selected
+ */
 void gamemode_random(){
-  // TODO
+  // Choose number of players
+  while(playerCount == 0) playerCount = pressed();
+
+  while(true){
+    // Start at a random position for a random amount of time
+    int player = random(0, playerCount);
+    int freq = random(200,300);
+    int threshold = random(-500,-300);
+    while(freq > threshold){
+      
+      // Activate light for active player
+      setLight((player % playerCount) + 1);
+      player++;
+      
+      // Starts slow, gets fast, ends slow
+      freq -= 10;
+      delay(max(abs(freq), 100));
+    }
+    // Player loses at position where it stops
+    player_lost((player % playerCount) + 1);
+  }
+}
+
+
+/*
+ * 8th Gamemode: Boolean state holder
+ */
+void gamemode_states(){
+  bool states[] = {false, false, false, false, false, false, false, false};
+  while(true){
+      
+    // Subtly blink for active states
+    uint8_t lightIndex = millis() / 10 % MAX_PLAYERS;
+    setLight(states[lightIndex] * (lightIndex + 1));
+
+    // Toggle state when button pressed
+    uint8_t button = pressed();
+    if(button > 0) states[button-1] = !states[button-1];
+  }
 }
